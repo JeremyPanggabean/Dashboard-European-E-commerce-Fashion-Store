@@ -4,7 +4,8 @@ library(shinydashboard)
 library(DT)
 library(plotly)
 library(dplyr)
-library(RPostgreSQL)
+library(DBI)
+library(RPostgres)
 library(lubridate)
 library(scales)
 
@@ -12,7 +13,7 @@ library(scales)
 get_db_connection <- function() {
   # Railway PostgreSQL connection
   con <- dbConnect(
-    PostgreSQL(),
+    RPostgres::Postgres(),
     host = "yamabiko.proxy.rlwy.net",
     port = 51854,
     dbname = "railway",
