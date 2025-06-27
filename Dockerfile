@@ -20,6 +20,8 @@ RUN install2.r --error --skipinstalled \
     dplyr \
     lubridate \
     ggplot2 \
+    RColorBrewer \
+    viridis \
     DBI \
     RPostgres \
     scales
