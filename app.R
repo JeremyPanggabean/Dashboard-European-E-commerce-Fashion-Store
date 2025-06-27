@@ -198,7 +198,6 @@ ui <- dashboardPage(
 # Server
 server <- function(input, output, session) {
   
-  # Reactive data
   data <- reactive({
     fetch_data()
   })
@@ -352,10 +351,7 @@ server <- function(input, output, session) {
   output$discount_analysis <- renderPlotly({
     discount_data <- data() %>%
       group_by(status_diskon) %>%
-      summarise(
-        count = n(),
-        total_sales = sum(jumlah_total, na.rm = TRUE)
-      )
+      summarise(count = n(), total_sales = sum(jumlah_total, na.rm = TRUE))
     
     p <- ggplot(discount_data, aes(x = status_diskon, y = count, fill = status_diskon)) +
       geom_bar(stat = "identity") +
@@ -374,10 +370,14 @@ server <- function(input, output, session) {
       summarise(count = n_distinct(id_pelanggan)) %>%
       arrange(desc(count))
     
-    plot_ly(profile_dist, labels = ~profil_pelanggan, values = ~count, type = 'pie',
-            textposition = 'inside', textinfo = 'label+percent',
-            marker = list(colors = c('#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'))) %>%
-      layout(showlegend = TRUE)
+    p <- ggplot(profile_dist, aes(x = profil_pelanggan, y = count, fill = profil_pelanggan)) +
+      geom_bar(stat = "identity") +
+      labs(x = "Profil Pelanggan", y = "Jumlah Pelanggan") +
+      theme_minimal() +
+      theme(legend.position = "none") +
+      scale_fill_viridis_d()
+    
+    ggplotly(p, tooltip = c("x", "y"))
   })
   
   output$aov_by_age <- renderPlotly({
@@ -418,14 +418,12 @@ server <- function(input, output, session) {
     loyalty <- data() %>%
       group_by(id_pelanggan) %>%
       summarise(total_orders = n_distinct(id_penjualan)) %>%
-      mutate(
-        loyalty_segment = case_when(
-          total_orders == 1 ~ "One-time",
-          total_orders <= 3 ~ "Low Loyalty",
-          total_orders <= 6 ~ "Medium Loyalty",
-          TRUE ~ "High Loyalty"
-        )
-      ) %>%
+      mutate(loyalty_segment = case_when(
+        total_orders == 1 ~ "One-time",
+        total_orders <= 3 ~ "Low Loyalty",
+        total_orders <= 6 ~ "Medium Loyalty",
+        TRUE ~ "High Loyalty"
+      )) %>%
       group_by(loyalty_segment) %>%
       summarise(customer_count = n())
     
@@ -442,15 +440,15 @@ server <- function(input, output, session) {
   # Product Analysis Charts
   output$top_products <- renderPlotly({
     top_products <- data() %>%
-      group_by(nama_produk) %>%
+      group_by(id_produk) %>%
       summarise(total_sales = sum(jumlah_total, na.rm = TRUE)) %>%
       arrange(desc(total_sales)) %>%
       head(10)
     
-    p <- ggplot(top_products, aes(x = reorder(nama_produk, total_sales), y = total_sales, fill = nama_produk)) +
+    p <- ggplot(top_products, aes(x = reorder(as.factor(id_produk), total_sales), y = total_sales, fill = as.factor(id_produk))) +
       geom_bar(stat = "identity") +
       coord_flip() +
-      labs(x = "Produk", y = "Total Penjualan (€)") +
+      labs(x = "ID Produk", y = "Total Penjualan (€)") +
       theme_minimal() +
       theme(legend.position = "none") +
       scale_fill_viridis_d()
@@ -460,14 +458,15 @@ server <- function(input, output, session) {
   
   output$price_distribution <- renderPlotly({
     price_dist <- data() %>%
-      mutate(price_range = cut(harga_per_unit, 
-                             breaks = c(0, 50, 100, 200, 500, Inf),
-                             labels = c("€0-50", "€50-100", "€100-200", "€200-500", "€500+"))) %>%
-      group_by(price_range) %>%
-      summarise(count = n()) %>%
-      filter(!is.na(price_range))
+      mutate(price_range = cut(harga_satuan,
+                               breaks = c(0, 50, 100, 200, 500, Inf),
+                               labels = c("€0-50", "€50-100", "€100-200", "€200-500", ">€500")))
     
-    p <- ggplot(price_dist, aes(x = price_range, y = count, fill = price_range)) +
+    price_summary <- price_dist %>%
+      group_by(price_range) %>%
+      summarise(count = n())
+    
+    p <- ggplot(price_summary, aes(x = price_range, y = count, fill = price_range)) +
       geom_bar(stat = "identity") +
       labs(x = "Rentang Harga", y = "Jumlah Produk") +
       theme_minimal() +
@@ -478,39 +477,20 @@ server <- function(input, output, session) {
   })
   
   output$price_quantity_correlation <- renderPlotly({
-    price_qty <- data() %>%
-      group_by(nama_produk) %>%
-      summarise(
-        avg_price = mean(harga_per_unit, na.rm = TRUE),
-        total_quantity = sum(kuantitas, na.rm = TRUE)
-      ) %>%
-      filter(total_quantity > 0 & avg_price > 0)
-    
-    p <- ggplot(price_qty, aes(x = avg_price, y = total_quantity)) +
-      geom_point(alpha = 0.6, color = "steelblue") +
-      geom_smooth(method = "lm", color = "red", se = FALSE) +
-      labs(x = "Rata-rata Harga (€)", y = "Total Kuantitas Terjual") +
+    p <- ggplot(data(), aes(x = harga_satuan, y = jumlah)) +
+      geom_point(alpha = 0.5, color = "steelblue") +
+      labs(x = "Harga Satuan (€)", y = "Jumlah Terjual") +
       theme_minimal()
     
     ggplotly(p, tooltip = c("x", "y"))
   })
   
-  # Raw data table
+  # Raw Data
   output$raw_data_table <- DT::renderDataTable({
-    DT::datatable(
-      data(),
-      options = list(
-        scrollX = TRUE,
-        pageLength = 15,
-        autoWidth = TRUE
-      ),
-      filter = "top",
-      class = 'cell-border stripe'
-    ) %>%
-      formatCurrency(columns = c("harga_per_unit", "jumlah_total"), currency = "€", digits = 2) %>%
-      formatDate(columns = c("tanggal_penjualan", "tanggal_mendaftar"), method = "toLocaleDateString")
+    DT::datatable(data(), options = list(pageLength = 10, scrollX = TRUE))
   })
+  
 }
 
-# Run the application
+# Run the app
 shinyApp(ui = ui, server = server)
