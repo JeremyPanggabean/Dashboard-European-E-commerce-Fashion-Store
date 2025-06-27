@@ -1,32 +1,37 @@
-# Use the official R base image
-FROM rocker/shiny:4.3.0
+# Use rocker/shiny which already has Shiny pre-installed
+FROM rocker/shiny:4.3.2
 
 # Set the working directory
 WORKDIR /srv/shiny-server
 
-# Install system dependencies
+# Install system dependencies (including PostgreSQL client libraries)
 RUN apt-get update && apt-get install -y \
     libpq-dev \
-    libssl-dev \
     libcurl4-openssl-dev \
+    libssl-dev \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages
-RUN R -e "install.packages(c('shiny', 'shinydashboard', 'DT', 'plotly', 'dplyr', 'RPostgreSQL', 'lubridate', 'scales', 'ggplot2'), repos='https://cran.rstudio.com/')"
+# Install R packages from binary (faster than source)
+RUN install2.r --error --skipinstalled \
+    shinydashboard \
+    DT \
+    plotly \
+    dplyr \
+    lubridate \
+    ggplot2 \
+    DBI \
+    RPostgres \
+    scales
 
-# Copy the Shiny app
+# Copy the Shiny app to the container
 COPY app.R /srv/shiny-server/
 
-# Make sure the app has the right permissions
+# Make sure the app is executable
 RUN chmod -R 755 /srv/shiny-server/
 
-# Expose the port that Shiny runs on
-EXPOSE 3838
+# Use Railway's dynamic port
+EXPOSE $PORT
 
-# Set environment variables for Railway
-ENV PORT=3838
-ENV HOST=0.0.0.0
-
-# Run the Shiny app
-CMD ["R", "-e", "shiny::runApp('/srv/shiny-server/app.R', host='0.0.0.0', port=3838)"]
+# Command to run the Shiny app with Railway's dynamic port
+CMD ["sh", "-c", "R -e \"shiny::runApp('/srv/shiny-server', host='0.0.0.0', port=as.numeric(Sys.getenv('PORT', '3838')))\""]
